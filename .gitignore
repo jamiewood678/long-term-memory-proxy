@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+
+# Captured prompts contain playthrough content — keep them local.
+tools/captures/
+
+numen/examples/backstory.md
+numen/examples/custom-backstory.md
+numen/examples/memory.md
