@@ -1,5 +1,6 @@
 .venv/
 __pycache__/
+.pytest_cache/
 
 # Captured prompts contain playthrough content — keep them local.
 tools/captures/
@@ -7,3 +8,13 @@ tools/captures/
 numen/examples/backstory.md
 numen/examples/custom-backstory.md
 numen/examples/memory.md
+numen/nvse/nvse.md
+numen/prompts/dialog-prompt.md
+numen/prompts/memory-prompt.md
+tools/logging_proxy.py
+tools/replay.py
+tools/requirements-dev.txt
+tools/requirements.txt
+tools/rewrite.py
+tools/tests/test_smoke.py
+tools/pytest.ini
