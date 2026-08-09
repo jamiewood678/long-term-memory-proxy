@@ -10,19 +10,40 @@ The immediate target is Numen, an AI NPC system for Fallout: New Vegas. Numen
 maintains NPC memories and sends them to the LLM as part of every prompt. I
 cannot easily modify Numen's internal memory storage or retrieval.
 
-Numen currently sends the **entire** NPC memory with each request. It compresses
-that memory to keep it manageable, and that helps — but compression has a floor.
-You can only summarise so far before you start destroying the detail that makes
-an NPC feel like it remembers anything. Past roughly 20k tokens, quality and
-performance deteriorate rapidly on my hardware, and raising the context window
-is not affordable on a consumer GPU.
+**Original premise, now corrected.** This project started from the assumption
+that Numen sends the entire NPC memory every request and that token budget is
+the binding constraint — past roughly 20k tokens, quality and performance
+deteriorate, so there'd be a hard ceiling on how long an NPC's life could get.
+Measurement (findings.md §7 Q2) showed this is wrong. Numen already bounds
+almost everything: `[Recent Events]` is actively compressed
+(trigger/batch/lossy), and `[Journal]` and the catalogs
+(`[Locations]`/`[Personas]`/`[Threads]`) are rendered through a fixed window
+— latest entries, pinned entries, and whatever Numen's own tagging judges
+relevant to the current scene — regardless of how large the underlying store
+gets. Real prompts have run 8-9.5k tokens against a ~20k budget. Token ceiling
+is not the constraint.
 
-So there is a hard ceiling on how long an NPC's life can get. Compression alone
-cannot lift it, because the whole memory is always in the prompt.
+**The real problem is recall, not capacity.** Numen's journal is append-only
+on disk — nothing is deleted (verified directly: 11 entries in, 14 out, zero
+removed, across two real compression passes) — but only a small, fixed slice
+of it ever reaches the model on a given turn. An entry that ages out of the
+latest-50 window and isn't pinned or re-tagged as relevant is invisible to
+the NPC from then on, even though the raw fact still exists in the file. From
+the player's side, "preserved but never shown again" and "forgotten" look
+identical. Numen's own relevance-picking is crude — tag/catalog-key matching,
+not real situational judgement — and demonstrably misses things: a whole
+conversational thread was dropped by an ordinary, well-inside-budget
+compression pass (findings.md §3).
 
-**This is not a project about making requests faster.** Latency is a constraint
-to respect, not the goal. The goal is to raise the ceiling on how much an NPC
-can remember.
+One place has *real*, permanent loss, not just a windowing gap:
+`[Personality]` entries, documented as "never evicted," were confirmed
+missing from the persisted file in two independent cases. That's a genuine
+bug worth guarding against separately from the recall problem.
+
+**This is not a project about making requests faster, and it turned out not
+to be a project about fitting more tokens into a small context either.** The
+goal is to make sure an NPC can still act on something it learned a long time
+ago, once Numen's own short window has moved past it.
 
 ## The core idea
 
@@ -44,12 +65,15 @@ structured into `[Journal]`, `[Personas]`, `[Locations]`, `[Threads]`,
 summarises events down as they accumulate.
 
 **I am keeping that.** Rebuilding it is not the point and would be competing
-with something that already works.
+with something that already works — imperfectly, but well enough that a
+parallel effort isn't justified (see findings.md §3 for the specific gaps
+found so far).
 
-What Numen does not have is **retrieval**. Its journal is flat and chronological;
-nothing pulls an old entry back into context when it becomes relevant again.
-That gap is the actual contribution of this project, and it is a much smaller
-piece of work than a full memory pipeline.
+What Numen does not have is **retrieval**. Its journal is rendered through a
+fixed recency/pinning/tag-match window; nothing pulls an old, non-recent,
+non-pinned, non-tag-matched entry back into context when it becomes relevant
+again. That gap is confirmed, not assumed, and it is the actual contribution
+of this project — a much smaller piece of work than a full memory pipeline.
 
 ## Proposed solution
 
@@ -68,25 +92,58 @@ It should:
   summarises. This is the safety net — lossy compression must never be
   irreversible.
 
-**2. Select memory per situation**
+**2. Select memory per situation, injected as a new `[Old Memories]` section**
 - Choose which archived material goes into the prompt based on what is currently
   happening, not on a fixed window.
-- Strip the memory Numen sent and substitute the selection. Adding without
-  removing does not reduce anything.
+- **Augment, don't substitute.** Inject as a new `[Old Memories]` block rather
+  than stripping and replacing anything Numen sends. Originally ruled out
+  ("adding without removing does not reduce anything") under the assumption
+  that token budget was the binding constraint — it isn't (see The problem,
+  above). Augmenting is safer: it can only add recall Numen's own window
+  wouldn't otherwise surface, and a bad selection can't break Numen's existing
+  working memory the way a bad substitution could.
+- **A named section, not a raw append, matters.** Numen's whole system prompt
+  is built from `^\[Name\]` blocks the model has thousands of tokens of
+  consistent exposure to before it ever reaches this one; a block in the same
+  shape reads as "more structured memory," not a foreign insertion.
+- **Dedup by construction.** Selection excludes anything already present in
+  Numen's own render this turn — the current `[Journal]` window, in-scope
+  catalog descriptions, `[Recent Events]`. `[Old Memories]` can only ever
+  contain things nowhere else in the prompt.
+- **Placement: stable zone, near the volatile tail.** Grouped with
+  `[Journal]`/catalogs/`[Personality]`, before the volatile block Phase 2
+  already moved to the end — pinned per conversation so it never fragments
+  the cache mid-conversation, but close enough to the generation point that
+  it isn't attention-diluted by ~9k tokens of everything ahead of it. Worth
+  measuring rather than guessing where exactly.
+- **Give it explicit usage instructions**, the same way `[Voice]`/`[Command
+  rules]` already steer other sections — something like *"things you
+  genuinely know from further back; treat as established fact, weave in only
+  if relevant, don't feel obligated to use one every turn."* An unexplained
+  new section risks the model either ignoring it or over-using it because
+  it's novel.
+- **Omit the header entirely when nothing qualifies** — cheaper than an empty
+  section, and consistent with the fail-safe discipline the rest of the
+  proxy already follows.
 
 **3. Keep identity intact**
 - Small, identity-critical sections (`[State]`, `[Trust Log]`, `[Romance Log]`,
   `[Personality]`, `[Personal goals]`, backstory) always go in. They are bounded
   and cheap.
 - Recent conversation always goes in, faithfully.
-- Only the unbounded, entity-keyed sections (`[Journal]`, `[Personas]`,
-  `[Locations]`, `[Threads]`) are selected from.
+- Only the entity-keyed sections (`[Journal]`, `[Personas]`, `[Locations]`,
+  `[Threads]`) are selected from — their persisted store can grow without
+  bound even though Numen's own render window keeps what reaches the prompt
+  small; that gap between "stored" and "visible" is what selection targets.
 
-**4. Hold a fixed context budget**
-- Target roughly 10–15k active tokens regardless of archive size.
-- Note the floor: system instructions, world glossary and backstory are fixed
-  costs the middleware cannot touch, likely 4–6k tokens. The realistic outcome
-  is "stops growing, forever", not "20k down to 5k".
+**4. Hold a bounded retrieval budget**
+- Not a shrink target — Numen's own prompt already runs comfortably under the
+  context limit (see The problem). Instead, cap how many *additional* tokens
+  the middleware is willing to inject per turn, so a bad retrieval can't blow
+  the latency budget even though there's no hard ceiling forcing it.
+- A few hundred to ~1-2k tokens of augmentation is the likely right order of
+  magnitude; tune against measured `prompt_n` headroom once Phase 5 is
+  underway, not a number picked in advance.
 
 ## Constraints
 
@@ -120,8 +177,8 @@ it runs out of game.
 - Model: `gemma-4-12B-it-heretic-Q4_K_M.gguf`
 
 ```
-.\llama-server.exe -m "gemma-4-12B-it-heretic-Q4_K_M.gguf" -ngl 99 -fa on ^
-  -ctk q4_0 -ctv q4_0 -c 20000 -b 4096 -ub 1024 -np 1 ^
+.\llama-server.exe  -m "gemma-4-12B-it-heretic-Q4_K_M.gguf" -ngl 99 -fa on ^
+  -ctk q4_0 -ctv q4_0 --swa-full -c 20000 -b 4096 -ub 1024 -np 1 ^
   --host 127.0.0.1 --port 8080 --repeat-penalty 1.0 ^
   --top-p 0.95 --top-k 64 --min-p 0.0 --reasoning off
 ```
