@@ -1,20 +1,21 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Captured prompts contain playthrough content — keep them local.
 tools/captures/
 
-numen/examples/backstory.md
-numen/examples/custom-backstory.md
-numen/examples/memory.md
-numen/nvse/nvse.md
-numen/prompts/dialog-prompt.md
-numen/prompts/memory-prompt.md
+# Gitignored docs contain playthrough content — keep them local.
+docs/numen/examples/backstory.md
+docs/numen/examples/custom-backstory.md
+docs/numen/examples/memory.md
+docs/numen/nvse/nvse.md
+docs/numen/prompts/dialog-prompt.md
+docs/numen/prompts/memory-prompt.md
+
+# Gitignored tools contain playthrough content — keep them local.
 tools/logging_proxy.py
 tools/replay.py
-tools/requirements-dev.txt
-tools/requirements.txt
 tools/rewrite.py
-tools/tests/test_smoke.py
-tools/pytest.ini

@@ -13,10 +13,10 @@ Feasibility stage. More has been measured than built.
 
 | File | Why |
 |---|---|
-| [proposal/findings.md](proposal/findings.md) | Measured facts. **Authoritative** — where it disagrees with idea.md, it wins |
-| [proposal/plan.md](proposal/plan.md) | Phases, open decisions (D1–D9), gating questions |
-| [proposal/idea.md](proposal/idea.md) | Intent and scope |
-| [numen/prompts/](numen/prompts/) | Numen's actual prompt templates, extracted from captures |
+| [docs/findings.md](docs/findings.md) | Measured facts. **Authoritative** — where it disagrees with idea.md, it wins |
+| [docs/plan.md](docs/plan.md) | Phases, open decisions (D1–D9), gating questions |
+| [docs/idea.md](docs/idea.md) | Intent and scope |
+| [docs/numen/prompts/](docs/numen/prompts/) | Numen's actual prompt templates, extracted from captures |
 | `Numen.log` (game dir) | Resolved agent chains, memory policy, full response bodies |
 | `D:\MO2 - TTW 3.4\mods\Numen - AI NPCs for FNV` | Numen's mod files, includes all npcs backstories, .esp file, menus, numen.dll, scripts, tts, lipgenerator
 | `D:\MO2 - TTW 3.4\mods\Numen - AI NPCs for FNV.ini` | Numen.ini and Agent.ini, includes all settings for Numen and Agent.
@@ -43,7 +43,7 @@ surviving claims aren't flattered by omission.
   `nvidia-smi`, and sysmem-fallback settings do not apply
 - Model: `gemma-4-12B-it-heretic-Q4_K_M.gguf`
 - llama-server `:8080`, proxy `:8081`
-- Python venv at `tools/.venv`
+- Python venv at `.venv` (repo root; `numen_proxy` package lives at `src/numen_proxy/`)
 - Numen install: `C:\Steam\steamapps\common\Fallout New Vegas`
   - `Numen.log` — config and responses
   - `Numen\NPCContext\{Plugin}\{FormID:6}.txt` — per-NPC memory files
@@ -58,7 +58,7 @@ surviving claims aren't flattered by omission.
   why. Failing open is always correct here
 - Do not modify Memory-chain requests — that is Numen's core loop (decision D3)
 - Do not write to Numen's memory files; Numen owns them (decision D4)
-- `tools/captures/` and `numen/examples/` hold playthrough content. Gitignored.
+- `tools/captures/` and `docs/numen/examples/` hold playthrough content. Gitignored.
   Never commit them and never paste them wholesale into a document
 
 ## CODE GEN

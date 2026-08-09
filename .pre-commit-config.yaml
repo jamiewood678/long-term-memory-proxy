@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        files: ^(src|tests)/.*\.py$
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        files: ^(src|tests)/.*\.py$
+
+      - id: basedpyright
+        name: basedpyright
+        entry: uv run basedpyright
+        language: system
+        files: ^(src|tests)/.*\.py$
+        pass_filenames: false

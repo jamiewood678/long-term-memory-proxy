@@ -56,8 +56,15 @@ background during Phase 1.
 
 ## Phase 1 — Harden the proxy
 
-`tools/logging_proxy.py` is investigation-grade. To leave it in the request path
-during normal play it needs to be boring and unbreakable.
+`tools/logging_proxy.py` is investigation-grade. **Decided, 9 August (D10):**
+the hardened proxy is built as `src/numen_proxy/` — a proper package
+with the SOLID/DI/test standards set up that day — rather than evolving
+`logging_proxy.py` in place. `logging_proxy.py` keeps doing capture/
+investigation duty until `numen_proxy` reaches feature parity with it, then
+gets retired.
+
+To leave the real proxy in the request path during normal play it needs to be
+boring and unbreakable.
 
 - **Never 5xx.** Any internal failure forwards the original bytes. A proxy error
   costs a 30 s agent cooldown in-game (`iAgentCooldownSeconds=30`).
@@ -72,6 +79,10 @@ during normal play it needs to be boring and unbreakable.
 - **Streaming verified.** Numen sends `stream: false` today, but the SSE path
   should be tested rather than assumed.
 - **Config file** rather than a growing pile of CLI flags.
+- **Fully Unit Tested** — ensure the rewrite works as intended, and that the proxy forwards bytes unchanged when it should.
+- **Integration Tested** — ensure the proxy forwards bytes unchanged when it should.
+- **SOLID and DI** — the proxy is a package, not a script, so that its components can be
+  tested in isolation and swapped out for mocks.
 
 **Exit criterion:** runs for a full play session with zero in-game failures, and
 produces a queryable request log.
@@ -185,6 +196,7 @@ criterion; it measured archive size, not whether recall actually improved.
 | D7 | Save-state coupling | Ignore / detect save reloads | Memory files are keyed by FormID, **not by save** — loading an old save does not roll memory back. Needs a decision on whether the archive should model this | Phase 3 |
 | D8 | Distillation model | Same Gemma 12B / something larger offline | Phase 4, by output quality | Phase 4 |
 | D9 | Re-selection triggers | Conversation start only / + location / + topic shift | Phase 5, by measuring how often each fires | Phase 5 |
+| D10 | Where does the hardened proxy live? | `tools/logging_proxy.py` evolved in place / new `src/numen_proxy/` package | **Decided, 9 August — `src/numen_proxy/`.** Ruff/basedpyright/pytest tiers and a Protocol-based DI seam were set up against this package that day; building Phase 1 there gets the benefit of that investment instead of retrofitting it onto the loose script. `logging_proxy.py` retired once parity is reached | Phase 1 |
 
 ---
 
